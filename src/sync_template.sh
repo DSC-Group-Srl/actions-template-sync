@@ -242,12 +242,12 @@ function cleanup_older_prs () {
     --state open \
     --label "${pr_labels}" \
     --json number,headRefName \
-    --jq '.[]')
+    --jq '.[] | "\(.number) \(.headRefName)"')
 
-  for older_pr in $older_prs
+  # DSC: gh's built-in --jq instead of the jq binary (missing on Windows runners).
+  while read -r pr_number branch_name
   do
-    branch_name=$(echo "$older_pr" | jq -r .headRefName)
-    pr_number=$(echo "$older_pr" | jq -r .number)
+    [[ -z "$pr_number" ]] && continue
 
     if [ "$branch_name" == "$local_branch_name" ] ; then
       warn "local branch name equals remote pr branch name ${local_branch_name}. Skipping pr cleanup for this branch"
@@ -256,12 +256,12 @@ function cleanup_older_prs () {
 
     if [ "$is_keep_branch_on_pr_cleanup" == true ] ; then
       gh pr close -c "[actions-template-sync] :construction_worker: automatically closed because there is a new open PR. Branch is kept alive" "$pr_number"
-      debug "Closed PR #${older_pr} but kept the branch"
+      debug "Closed PR #${pr_number} but kept the branch"
     else
       gh pr close -c "[actions-template-sync] :construction_worker: automatically closed because there is a new open PR" -d "$pr_number"
-      debug "Closed PR #${older_pr}"
+      debug "Closed PR #${pr_number}"
     fi
-  done
+  done <<< "$older_prs"
 }
 
 ##################################

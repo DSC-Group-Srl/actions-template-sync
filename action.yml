@@ -101,7 +101,10 @@ runs:
   # image: "src/Dockerfile"
   steps:
     - name: github sync
-      run: ${{github.action_path}}/src/entrypoint.sh
+      # DSC: path from the env var (not the github.action_path expression) with
+      # backslashes turned into slashes, so the same step runs on Linux and on
+      # Windows runners (Git Bash).
+      run: bash "${GITHUB_ACTION_PATH//\\//}/src/entrypoint.sh"
       # working-directory: src/
       shell: bash
       id: sync
