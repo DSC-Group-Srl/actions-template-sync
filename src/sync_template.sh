@@ -473,8 +473,9 @@ function arr_checkout_branch_and_pull() {
 
   echo "::group::checkout branch and pull"
 
-  debug "create new branch from default branch with name ${PR_BRANCH}"
-  git checkout -b "${PR_BRANCH}"
+  # -B: on self-hosted runners the workspace (and its local branches) survives between runs
+  debug "create (or reset) branch from default branch with name ${PR_BRANCH}"
+  git checkout -B "${PR_BRANCH}"
   debug "pull changes from template"
 
   pull_source_changes "${SOURCE_REPO}" "${GIT_REMOTE_PULL_PARAMS}"
