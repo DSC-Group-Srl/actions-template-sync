@@ -42,6 +42,35 @@ if ! [ -x "$(command -v gh)" ]; then
 fi
 
 ############################################
+# DSC: per-run gh and git config
+############################################
+# Several runner instances on one self-hosted machine run as the same user, so
+# gh's config dir, its keyring entry and the global ~/.gitconfig (credential
+# helper written by "gh auth setup-git") were shared between parallel runs: one
+# run's "gh auth logout" logged the others out mid-sync ("could not read
+# Username", "not logged into github.com"). Each run now gets its own gh config
+# dir and global git config, and keeps the token in that dir rather than in the
+# shared OS keyring. IS_SHARED_GH_CONFIG=true restores the old behaviour.
+if [[ "${IS_SHARED_GH_CONFIG:-false}" != "true" ]]; then
+  run_cfg_base="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+  run_cfg_base="${run_cfg_base//\\//}"
+  RUN_CFG_DIR="$(mktemp -d "${run_cfg_base}/template-sync-${GITHUB_RUN_ID:-local}-XXXXXX")"
+  export GH_CONFIG_DIR="${RUN_CFG_DIR}/gh"
+  mkdir -p "${GH_CONFIG_DIR}"
+  export GIT_CONFIG_GLOBAL="${RUN_CFG_DIR}/gitconfig"
+  : > "${GIT_CONFIG_GLOBAL}"
+  # keep the machine's own global git settings (autocrlf, safe.directory, ...)
+  if [[ -f "${HOME}/.gitconfig" ]]; then
+    git config --file "${GIT_CONFIG_GLOBAL}" include.path "${HOME//\\//}/.gitconfig"
+  fi
+  trap 'rm -rf "${RUN_CFG_DIR}"' EXIT
+fi
+GH_LOGIN_STORAGE=()
+if gh auth login --help 2>/dev/null | grep -q -- '--insecure-storage'; then
+  GH_LOGIN_STORAGE=(--insecure-storage)
+fi
+
+############################################
 # Variables
 ############################################
 
@@ -200,7 +229,7 @@ function gh_login_src_github() {
     info "logging out"
     gh auth logout --hostname "${source_repo_hostname}" || debug "not logged in"
     info "login to the source git repository"
-    gh auth login --git-protocol "https" --hostname "${source_repo_hostname}" --with-token <<< "${SOURCE_GH_TOKEN}"
+    gh auth login "${GH_LOGIN_STORAGE[@]}" --git-protocol "https" --hostname "${source_repo_hostname}" --with-token <<< "${SOURCE_GH_TOKEN}"
     gh auth status
     gh auth setup-git --hostname "${source_repo_hostname}"
     gh auth status --hostname "${source_repo_hostname}"
